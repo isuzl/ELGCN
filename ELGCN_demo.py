@@ -116,7 +116,7 @@ best_model_state, model_path = model.train_model(
 )
 
 # TEST MODEL
-results_df = model.test_model(
+model.test_model(
     model_path=model_path,
     edge_index_series_2=edge_index_series_2,
     edge_index_series=edge_index_series,
