@@ -65,7 +65,7 @@ download_data(args.data)
 # DATA GENERATE
 filtered_data, edge_index_series, edge_index_series_2,\
     num_users, num_items = preprocess_data(args=args,
-                                                     generate_edge_list=generate_edge_list)
+                                           generate_edge_list=generate_edge_list)
 
 # DEFINE MODEL
 model = ELGCN(
