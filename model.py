@@ -23,20 +23,14 @@ class ELGCN(nn.Module):
         self.first = first
         self.EMA = EMA
         self.ema_alpha = ema_alpha
-
-        # 유저와 아이템 임베딩 레이어 (Learnable Embedding)
         self.user_embs_init = nn.Embedding(self.num_users, emb_dim)
-        self.item_embs_init = nn.Embedding(self.num_items, emb_dim)
-        
+        self.item_embs_init = nn.Embedding(self.num_items, emb_dim)        
+        self.evolve_embs = mat_GRU_cell(emb_dim, num_users, num_items).to(device)
+        self.convs = nn.ModuleList([LGConv() for _ in range(num_layers)]).to(device)        
+        self.temporal_attention = TemporalAttention(emb_dim).to(device)
+
         nn.init.xavier_uniform_(self.user_embs_init.weight) 
         nn.init.xavier_uniform_(self.item_embs_init.weight)
-
-        # GRU와 LightGCN 레이어 정의
-        self.evolve_embs = mat_GRU_cell(emb_dim, num_users, num_items).to(device)
-        self.convs = nn.ModuleList([LGConv() for _ in range(num_layers)]).to(device)
-        
-        # Temporal Attention Layer 추가
-        self.temporal_attention = TemporalAttention(emb_dim).to(device)
 
     def forward(self, edge_index_series, 
                 epoch=None, 
@@ -48,7 +42,7 @@ class ELGCN(nn.Module):
                               dim=0).to(self.device)
         
         if self.first == 'GRU':
-        
+            
             embs_init = embs_init.T
             embs_init_seq = [embs_init.T]
             for _ in range(len(edge_index_series) - 1):
@@ -67,7 +61,6 @@ class ELGCN(nn.Module):
                         embs = conv(x=embs, edge_index=edge_index)
                         embs_sum += embs
                         count += 1
-
                     embs_t = embs_sum / count
                     
                 else:
@@ -75,29 +68,25 @@ class ELGCN(nn.Module):
                     for conv in self.convs:
                         out = conv(x=embs, edge_index=edge_index)
                         embs = alpha * out + (1 - alpha) * embs
-                    embs_t = embs
-                    
+                    embs_t = embs                    
                 embs_t_seq.append(embs_t)
-
             embs_t_stack = torch.stack(embs_t_seq, dim=0)
             
         elif self.first == 'GCN':
             
             h = embs_init
-            h_seq = []  # 각 시점의 임베딩 저장
+            h_seq = [] 
 
-            # 시간 순서대로 GCN → GRU 반복
             for t in range(len(edge_index_series)):
                 edge_index_t = edge_index_series[t].to(self.device)
 
-                x = h  # 이전 시점의 hidden state
-
+                x = h 
                 if self.EMA is False:
                     x_sum = x.clone()
                     count = 1
 
                     for conv in self.convs:
-                        x = conv(x, edge_index_t)  # (N, D)
+                        x = conv(x, edge_index_t)
                         x_sum += x
                         count+=1
                     x = x_sum / count
@@ -106,20 +95,15 @@ class ELGCN(nn.Module):
                     alpha = self.ema_alpha
                     for conv in self.convs:
                         out = conv(x, edge_index_t)
-                        x=  alpha * out + (1-alpha)*x
-
-                # GRU로 업데이트 (GRU는 입력 (D, N)을 받기 때문에 transpose)
-                h = self.evolve_embs(x.T).T  # (D, N) → (D, N) → (N, D)
-                h_seq.append(h)  # 시점별 결과 저장
-
-            # 3. 시점별 임베딩 stack (T, N, D)
-            embs_t_stack = torch.stack(h_seq, dim=0)
-            
+                        x = alpha * out + (1-alpha)*x
+                h = self.evolve_embs(x.T).T 
+                h_seq.append(h) 
+            embs_t_stack = torch.stack(h_seq, dim=0)            
         
         if self.agg_mode == 'mean' or (self.agg_mode == 'attention' and epoch is not None and epoch < warmup_epochs):
             final_embs = torch.mean(embs_t_stack, dim=0)
         elif self.agg_mode == 'attention':
-            attn_input = embs_t_stack  # [-k:]
+            attn_input = embs_t_stack 
             final_embs = self.temporal_attention(attn_input)
         else:
             raise ValueError("Invalid agg_mode. Choose from ['mean', 'attention']")
@@ -153,13 +137,11 @@ class ELGCN(nn.Module):
                     tr_last_time - time_steps + 1 if not one_batch_sample else tr_last_time
                 )
             
-            print(f"\n[Epoch {epoch + 1}] Training...")
+            print(f"\n[Epoch {epoch + 1}]")
             
-            if sgl:
-                
+            if sgl:                
                 time_loss = 0.0
-                for t in tqdm(tr_time_range, desc=f"Train"):
-                    
+                for t in tqdm(tr_time_range, desc=f"Train"):                    
                     current_window = edge_index_series_2[t-time_steps:t]
                     current_window = [cw.to(self.device) for cw in current_window]                            
                     
@@ -195,14 +177,11 @@ class ELGCN(nn.Module):
                         loss.backward()
                         optimizer.step()
                         
-                        total_bpr += batch_bpr.item()
-                        
-                    avg_bpr = total_bpr / n_batch
-                    
+                        total_bpr += batch_bpr.item()                        
+                    avg_bpr = total_bpr / n_batch                    
                     time_loss += (avg_bpr + ssl_lambda * ssl_loss.item())                    
                 
-            else:
-                
+            else:                
                 time_loss = 0.0
                 for t in tqdm(tr_time_range, desc=f"Train"):
                     
@@ -235,10 +214,7 @@ class ELGCN(nn.Module):
                         total_bpr += batch_bpr.item()     
 
                     time_loss += total_bpr / n_batch   
-                # total_loss = time_loss
-
-            epoch_loss = time_loss / len(tr_time_range)
-                
+            epoch_loss = time_loss / len(tr_time_range)                
             tr_total_loss.append(epoch_loss)
             
             tr_epoch_end_time = datetime.now()
@@ -250,7 +226,6 @@ class ELGCN(nn.Module):
             self.eval()
             with torch.no_grad():
                 val_epoch_start_time = datetime.now()
-                print(f"[Epoch {epoch + 1}] Validation...")
                 
                 val_time_range = range(
                     val_first_time,
@@ -294,7 +269,6 @@ class ELGCN(nn.Module):
                             total_bpr += batch_bpr
                         avg_bpr = total_bpr / n_batch
                         time_loss += (float(avg_bpr) + ssl_lambda * float(ssl_loss))
-                    # total_loss = time_loss
                     
                 else:
                     time_loss = 0.0
@@ -323,7 +297,6 @@ class ELGCN(nn.Module):
                                 
                             total_bpr += float(batch_bpr)
                         time_loss += total_bpr / n_batch
-                    # total_loss = time_loss.item()
 
                 avg_val_loss = time_loss / len(val_time_range)
                 val_total_loss.append(avg_val_loss)
@@ -339,7 +312,6 @@ class ELGCN(nn.Module):
                 avg_recent_losses = np.round(np.mean(recent_losses), 5)
                 
                 if avg_val_loss_value < avg_recent_losses - improvement_threshold:
-                # if avg_val_loss_value < avg_recent_losses:
                     best_val_loss_value = avg_val_loss_value
                     best_epoch = epoch + 1
                     no_improve_count = 0
@@ -361,7 +333,6 @@ class ELGCN(nn.Module):
             print(f"Epoch {epoch + 1} total duration: {total_epoch_duration}")
             print()
 
-        # Save results
         tr_total_loss_cpu = [tensor_to_float(loss) for loss in tr_total_loss]
         val_total_loss_cpu = [tensor_to_float(loss) for loss in val_total_loss]
         loss_df = pd.DataFrame({
@@ -380,7 +351,6 @@ class ELGCN(nn.Module):
 
         if best_model_state:
             best_model_path = os.path.join(best_model_dir, f'{model_ver}_ep{best_epoch}.pth')
-            # model_save_path = f'{best_model_dir}/{data_name}_{model_name}_{model_ver}_ep{best_epoch}.pth' 
             torch.save(best_model_state, best_model_path)
             print(f"Best model saved at epoch {best_epoch}")
         
