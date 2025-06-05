@@ -403,8 +403,6 @@ class ELGCN(nn.Module):
         save_result_dir = os.path.join(f"{model_name}_save_result", data_name)
         prfm_path = os.path.join(save_result_dir, f'{model_ver}_recall_ndcg.csv')
         results_df.to_csv(prfm_path, index=False)
-        
-        return results_df
     
     
 class mat_GRU_cell(nn.Module):
