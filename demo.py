@@ -111,7 +111,7 @@ best_model_state, model_path = model.train_model(
     sgl=args.sgl,
     cont_loss=args.cont_loss,
     ssl_lambda=args.ssl_lambda,
-    data_name=args.data_name,
+    data_name=args.data,
     model_name=args.model_name
 )
 
