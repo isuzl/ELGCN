@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser(description="ELGCN Config")
 # DATA PARAMETERS
 parser.add_argument('--data', type=str, default='movielens', choices=['movielens', 'netflix'])
 parser.add_argument('--rate', type=int, default=4)
-parser.add_argument('--interaction_threshold', type=int, default=500)
+parser.add_argument('--interaction_threshold', type=int, default=200)
 parser.add_argument('--all_time_steps', type=int, default=59)
 
 # MODEL PARAMETERS
