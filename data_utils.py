@@ -43,14 +43,18 @@ def download_data(dataset_name=None):
         shutil.rmtree(extract_dir)
 
     elif dataset_name == 'netflix':
-        # Step 1: 압축 파일 목록
-        zip_files = [
-            "data/netflix_1.txt",
-            "data/netflix_2.txt",
-            "data/netflix_3.txt",
-            "data/netflix_4.txt"
-        ]
 
+        output_csv_path = os.path.join('data', 'netflix.csv')
+        if os.path.exists(output_csv_path):
+            print(f"{dataset_name} data already exists.")
+            return output_csv_path
+            
+        zip_files = [
+            "combined_data_1.txt",
+            "combined_data_2.txt",
+            "combined_data_3.txt",
+            "combined_data_4.txt"
+        ]
         extracted_files = []
 
         for zip_path in zip_files:
@@ -58,15 +62,9 @@ def download_data(dataset_name=None):
                 print(f"Missing zip file: {zip_path}")
                 return None
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # 자동으로 압축 내부 파일 이름을 가져옴
-                name = zip_ref.namelist()[0]  # 보통 하나의 파일만 들어 있음
+                name = zip_ref.namelist()[0]
                 zip_ref.extractall("data/")
-                extracted_files.append(os.path.join("data", name))
-
-        output_csv_path = os.path.join('data', 'netflix.csv')
-        if os.path.exists(output_csv_path):
-            print(f"{dataset_name} data already exists.")
-            return output_csv_path
+                extracted_files.append(os.path.join("data", name))        
 
         print("Processing Netflix dataset...")
         rows = []
@@ -95,25 +93,16 @@ def download_data(dataset_name=None):
 def convert_jsonl_gz_to_csv(input_path, output_csv_path):
     data = []
 
-    # .jsonl.gz 파일 열기
     with gzip.open(input_path, 'rt', encoding='utf-8') as f:
         for line in f:
             data.append(json.loads(line))
 
-    # 리스트 → DataFrame → CSV 저장
     df = pd.DataFrame(data)
     df.to_csv(output_csv_path, index=False)
     print(f"Converted and saved to {output_csv_path}")
     
     
 def preprocess_data(args, generate_edge_list):
-    """
-    - CSV 파일을 불러오고
-    - rating 기준 필터링
-    - 사용자/아이템 상호작용 기준 필터링
-    - ID 매핑
-    - edge index 시계열 생성
-    """
 
     if args.data_name == 'movielens':
         data_path = os.path.join('data', 'ml-25m.csv')
@@ -166,18 +155,13 @@ def preprocess_data(args, generate_edge_list):
     return filtered_data, edge_index_series, edge_index_series_2, num_users, num_items
 
 
-# Separate time point and generate edge list
 def generate_edge_list(data, coluser, colitem, coltime, timepoints, num_users):
-    '''
-    coluser, colitem, coltime: data 내 user, item, time column 명
-    '''
     
     if not is_datetime64_any_dtype(data[coltime]):
         data[coltime] = pd.to_datetime(data[coltime])
     
     data['time_point'] = pd.qcut(data[coltime], timepoints, labels = False)
     
-    # edge list 생성
     edge_index_series = []
     for t in range(timepoints):
         temp_data = data[data['time_point'] == t]
@@ -186,7 +170,6 @@ def generate_edge_list(data, coluser, colitem, coltime, timepoints, num_users):
                                   dtype = torch.long)
         edge_index_series.append(edge_index)
         
-    # adj. mat.대로 edge list 생성
     edge_index_series_2 = []
     for edge_list in edge_index_series:
         list1 = torch.cat([edge_list[0], edge_list[1]])
