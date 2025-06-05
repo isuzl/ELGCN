@@ -6,18 +6,19 @@ from data_utils import *
 
 import warnings
 warnings.filterwarnings('ignore')
+
 import os
-path = '/home/suzl01/ELGCN'
-os.chdir(path)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(current_dir)
+print("Current working directory:", os.getcwd())
 
 device = torch.device(f"cuda:1" if torch.cuda.is_available() else "cpu")
 print(f"TORCH: {torch.cuda.is_available()} | GPU: {device}")
 
-
 parser = argparse.ArgumentParser(description="ELGCN Config")
 
 # DATA PARAMETERS
-parser.add_argument('--data', type=str, default='netflix', choices=['movielens', 'netflix'])
+parser.add_argument('--data', type=str, default='movielens', choices=['movielens', 'netflix'])
 parser.add_argument('--rate', type=int, default=4)
 parser.add_argument('--interaction_threshold', type=int, default=500)
 parser.add_argument('--all_time_steps', type=int, default=59)
@@ -53,8 +54,7 @@ parser.add_argument('--cont_loss', type=str, choices=['vanilla', 'num_batch', 'r
 parser.add_argument('--ssl_lambda', type=float, default=0.01)
 
 # SAVE/MODEL VERSION
-parser.add_argument('--model_ver', type=str, default='v1-1')
-parser.add_argument('--data_name', type=str, default='netflix', choices=['movielens, netflix'])
+parser.add_argument('--model_ver', type=str, default='demo')
 parser.add_argument('--model_name', type=str, default='elgcn')
 
 args = parser.parse_args()
@@ -128,5 +128,5 @@ results_df = model.test_model(
     device=device,
     model_ver=args.model_ver,
     model_name=args.model_name,
-    data_name=args.data_name
+    data_name=args.data
 )
